@@ -1,0 +1,133 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'shellwords'
+require 'datadog_api_client'
+require 'json'
+
+class DDog
+  def initialize(options)
+    @options = options
+    @options[:eu] ? eu_conf : default_conf
+  end
+
+  def default_conf
+    DatadogAPIClient::V1.configure do |config|
+      config.api_key = ENV['DD_API_KEY_US']
+      config.application_key = ENV['DD_APP_KEY_US']
+      config.server_variables[:site] = 'datadoghq.com'
+    end
+  end
+
+  def eu_conf
+    DatadogAPIClient::V1.configure do |config|
+      config.api_key = ENV['DD_API_KEY_EU']
+      config.application_key = ENV['DD_APP_KEY_EU']
+      config.server_variables[:site] = 'datadogeu.com'
+    end
+  end
+
+  def dashboard_api
+    @dashboard_api ||= DatadogAPIClient::V1::DashboardsAPI.new
+  end
+
+  def all_api_keys
+    DatadogAPIClient::V1::KeyManagementAPI.new.list_api_keys.api_keys
+  end
+
+  def api_key(args)
+    type = args[0].to_sym
+    target = args[1]
+    if type == :value
+      all_api_keys.select { |k| k.key =~ /#{target}$/ }
+    else
+      all_api_keys.select { |k| k.send(args[0].to_sym).eql? target }
+    end.each { |k| puts "#{k.name}: #{k.key}" }
+  end
+
+  def api_keys(_args)
+    keys = all_api_keys
+    printf "%<num>d api keys found:\n\n", num: keys.length
+    keys.each { |k| puts k.name.to_s }
+  end
+
+  def log_indexes(_args)
+    logapi = DatadogAPIClient::V1::LogsIndexesAPI.new
+    logapi.list_log_indexes.indexes.each { |i| puts "#{i.name}: #{i.id}" }
+  end
+
+  def get_dashboard(id)
+    dashboard_api.get_dashboard(id)
+  end
+
+  def get_user(name)
+    DatadogAPIClient::V1::UsersAPI.new.get_user(name.first)
+  end
+
+  def execute!(command, args)
+    puts "calling #{command} with (#{args})" if @options[:verbose]
+    args.map { |a| send(command.to_sym, a).to_hash }
+  rescue NoMethodError => e
+    puts "Unknown command #{command}: #{e}"
+  end
+end
+
+def shut_down
+  puts "\nShutting down gracefully..."
+  exit
+end
+
+# Trap ^C and Kill
+Signal.trap('INT') { shut_down }
+Signal.trap('TERM') { shut_down }
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = 'Usage: dd [options]'
+  opts.on('-e', '--eu', 'Switch to Datadog EU region') { options[:eu] = true }
+  opts.on('-f FILE', '--file=FILE', 'Read arguments from file') { |f| options[:argument_file] = f }
+  opts.on('-v', '--[no-]verbose', 'Run verbosely') { options[:verbose] = true }
+end.parse!
+
+ddog = DDog.new(options)
+
+if ARGV.length > 1
+  command = "#{ARGV[0]}_#{ARGV[1]}"
+  ARGV.shift(2)
+  if options[:argument_file]
+    args = ARGV.dup
+    args += options[:argument_file] == '-' ? ARGF.readlines : File.readlines(options[:argument_file])
+    puts JSON.dump(ddog.execute!(command, args))
+  else
+    puts JSON.dump(ddog.execute!(command, ARGV))
+  end
+else
+  loop do
+    print 'dd> '
+    begin
+      input = Shellwords.split(ARGF.readline.strip)
+      shut_down if input.first.eql? 'exit'
+      next if input.first !~ /^[a-z][a-z\s]+/
+
+      if input.include?('|')
+        i = input.index('|')
+        shell_command = input[i + 1..-1]
+        ddog_command = "#{input[0]}_#{input[1]}"
+        ddog_args = input[2..i - 1]
+        puts "DDOG Command: #{ddog_command} #{ddog_args}" if options[:verbose]
+        puts "Shell Command: #{shell_command}" if options[:verbose]
+        results = JSON.dump(ddog.execute!(ddog_command, ddog_args))
+        IO.popen(shell_command, mode: 'w+', err: %i[child out]) do |pipe_io|
+          pipe_io.write results
+          pipe_io.close_write
+          puts pipe_io.read
+        end
+      else
+        ddog_command = "#{input[0]}_#{input[1]}"
+        puts JSON.dump(ddog.execute!(ddog_command, input[2..-1]))
+      end
+    rescue EOFError => _e
+      shut_down
+    end
+  end
+end
