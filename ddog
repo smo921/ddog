@@ -58,6 +58,9 @@ class DDog
 
   def get_dashboard(id)
     dashboard_api.get_dashboard(id)
+  rescue DatadogAPIClient::V1::APIError, ArgumentError => e
+    STDERR.puts "Problem with dashboard: #{id}"
+    {}
   end
 
   def get_user(name)
@@ -65,10 +68,10 @@ class DDog
   end
 
   def execute!(command, args)
-    puts "calling #{command} with (#{args})" if @options[:verbose]
+    STDERR.puts "calling #{command} with (#{args})" if @options[:verbose]
     args.map { |a| send(command.to_sym, a).to_hash }
   rescue NoMethodError => e
-    puts "Unknown command #{command}: #{e}"
+    STDERR.puts "Unknown command #{command}: #{e}"
   end
 end
 
