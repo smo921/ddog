@@ -13,9 +13,11 @@ class DDog
 
   def default_conf
     DatadogAPIClient::V1.configure do |config|
-      config.api_key = ENV['DD_API_KEY_US']
-      config.application_key = ENV['DD_APP_KEY_US']
+      config.api_key = ENV.fetch 'DD_API_KEY_US'
+      config.application_key = ENV.fetch 'DD_APP_KEY_US'
       config.server_variables[:site] = 'datadoghq.com'
+    rescue KeyError
+      abort "DD_API_KEY_US and DD_APP_KEY_US must be set."
     end
   end
 
@@ -24,6 +26,8 @@ class DDog
       config.api_key = ENV['DD_API_KEY_EU']
       config.application_key = ENV['DD_APP_KEY_EU']
       config.server_variables[:site] = 'datadogeu.com'
+    rescue KeyError
+      abort "DD_API_KEY_EU and DD_APP_KEY_EU must be set."
     end
   end
 
@@ -60,6 +64,7 @@ class DDog
     dashboard_api.get_dashboard(id)
   rescue DatadogAPIClient::V1::APIError, ArgumentError => e
     STDERR.puts "Problem with dashboard: #{id}"
+    STDERR.puts e if @options[:verbose]
     {}
   end
 
