@@ -11,28 +11,42 @@ class DDog
     @options[:eu] ? eu_conf : default_conf
   end
 
+  def execute!(command, args)
+    STDERR.puts "calling #{command} with (#{args})" if @options[:verbose]
+    args.map { |a| send(command.to_sym, a).to_hash }
+  rescue NoMethodError => e
+    STDERR.puts "Unknown command #{command}: #{e}"
+  end
+
+  private
+
   def default_conf
     DatadogAPIClient::V1.configure do |config|
       config.api_key = ENV.fetch 'DD_API_KEY_US'
       config.application_key = ENV.fetch 'DD_APP_KEY_US'
       config.server_variables[:site] = 'datadoghq.com'
+      # config.debugging = true
     rescue KeyError
-      abort "DD_API_KEY_US and DD_APP_KEY_US must be set."
+      abort 'DD_API_KEY_US and DD_APP_KEY_US must be set.'
     end
   end
 
   def eu_conf
     DatadogAPIClient::V1.configure do |config|
-      config.api_key = ENV['DD_API_KEY_EU']
-      config.application_key = ENV['DD_APP_KEY_EU']
-      config.server_variables[:site] = 'datadogeu.com'
+      config.api_key = ENV.fetch 'DD_API_KEY_EU'
+      config.application_key = ENV.fetch 'DD_APP_KEY_EU'
+      config.server_variables[:site] = 'datadoghq.eu'
     rescue KeyError
-      abort "DD_API_KEY_EU and DD_APP_KEY_EU must be set."
+      abort 'DD_API_KEY_EU and DD_APP_KEY_EU must be set.'
     end
   end
 
   def dashboard_api
     @dashboard_api ||= DatadogAPIClient::V1::DashboardsAPI.new
+  end
+
+  def monitor_api
+    @monitor_api ||= DatadogAPIClient::V1::MonitorsAPI.new
   end
 
   def all_api_keys
@@ -68,15 +82,16 @@ class DDog
     {}
   end
 
-  def get_user(name)
-    DatadogAPIClient::V1::UsersAPI.new.get_user(name.first)
+  def get_monitor(id)
+    monitor_api.get_monitor(id)
+  rescue DatadogAPIClient::V1::APIError => e
+    STDERR.puts "Problem with monitor: #{id}"
+    STDERR.puts e if @options[:verbose]
+    {}
   end
 
-  def execute!(command, args)
-    STDERR.puts "calling #{command} with (#{args})" if @options[:verbose]
-    args.map { |a| send(command.to_sym, a).to_hash }
-  rescue NoMethodError => e
-    STDERR.puts "Unknown command #{command}: #{e}"
+  def get_user(name)
+    DatadogAPIClient::V1::UsersAPI.new.get_user(name.first)
   end
 end
 
@@ -104,7 +119,7 @@ if ARGV.length > 1
   ARGV.shift(2)
   if options[:argument_file]
     args = ARGV.dup
-    args += options[:argument_file] == '-' ? ARGF.readlines : File.readlines(options[:argument_file])
+    args += options[:argument_file] == '-' ? ARGF.readlines : File.readlines(options[:argument_file]).map(&:chomp)
     puts JSON.dump(ddog.execute!(command, args))
   else
     puts JSON.dump(ddog.execute!(command, ARGV))
@@ -119,7 +134,7 @@ else
 
       if input.include?('|')
         i = input.index('|')
-        shell_command = input[i + 1..-1]
+        shell_command = input[(i + 1)..]
         ddog_command = "#{input[0]}_#{input[1]}"
         ddog_args = input[2..i - 1]
         puts "DDOG Command: #{ddog_command} #{ddog_args}" if options[:verbose]
@@ -132,7 +147,7 @@ else
         end
       else
         ddog_command = "#{input[0]}_#{input[1]}"
-        puts JSON.dump(ddog.execute!(ddog_command, input[2..-1]))
+        puts JSON.dump(ddog.execute!(ddog_command, input[2..]))
       end
     rescue EOFError => _e
       shut_down
