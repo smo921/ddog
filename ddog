@@ -12,10 +12,10 @@ class DDog
   end
 
   def execute!(command, args)
-    STDERR.puts "calling #{command} with (#{args})" if @options[:verbose]
+    warn "calling #{command} with (#{args})" if @options[:verbose]
     args.map { |a| send(command.to_sym, a).to_hash }
   rescue NoMethodError => e
-    STDERR.puts "Unknown command #{command}: #{e}"
+    warn "Unknown command #{command}: #{e}"
   end
 
   private
@@ -77,16 +77,16 @@ class DDog
   def get_dashboard(id)
     dashboard_api.get_dashboard(id)
   rescue DatadogAPIClient::V1::APIError, ArgumentError => e
-    STDERR.puts "Problem with dashboard: #{id}"
-    STDERR.puts e if @options[:verbose]
+    warn "Problem with dashboard: #{id}"
+    warn e if @options[:verbose]
     {}
   end
 
   def get_monitor(id)
     monitor_api.get_monitor(id)
   rescue DatadogAPIClient::V1::APIError => e
-    STDERR.puts "Problem with monitor: #{id}"
-    STDERR.puts e if @options[:verbose]
+    warn "Problem with monitor: #{id}"
+    warn e if @options[:verbose]
     {}
   end
 
