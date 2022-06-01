@@ -13,7 +13,7 @@ class DDog
 
   def execute!(command, args)
     warn "calling #{command} with (#{args})" if @options[:verbose]
-    args.map { |a| send(command.to_sym, a).to_hash }
+    args.empty? ? send(command.to_sym) : args.map { |a| send(command.to_sym, a).to_hash }
   rescue NoMethodError => e
     warn "Unknown command #{command}: #{e}"
   end
@@ -63,15 +63,18 @@ class DDog
     end.each { |k| puts "#{k.name}: #{k.key}" }
   end
 
-  def api_keys(_args)
+  def api_keys
     keys = all_api_keys
-    printf "%<num>d api keys found:\n\n", num: keys.length
-    keys.each { |k| puts k.name.to_s }
+    keys.map { |k| k.name.to_s }
   end
 
-  def log_indexes(_args)
+  def log_indexes
     logapi = DatadogAPIClient::V1::LogsIndexesAPI.new
-    logapi.list_log_indexes.indexes.each { |i| puts "#{i.name}: #{i.id}" }
+    logapi.list_log_indexes.indexes.map { |i| i.name.to_s }
+  end
+
+  def monitors
+    monitor_api.list_monitors
   end
 
   def get_dashboard(id)
