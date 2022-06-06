@@ -1,0 +1,4 @@
+require: rubocop-rake
+
+AllCops:
+  NewCops: enable
