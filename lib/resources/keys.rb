@@ -4,8 +4,9 @@
 module Keys
   def self.help
     <<~HELP
-      api key <"value"|field_name> <string>: Fetch api keys by field
-      api keys: Fetch all api key names
+      API/APP Keys:
+        api key <"value"|field_name> <string>: Fetch api keys by field
+        api keys: Fetch all api key names
     HELP
   end
 

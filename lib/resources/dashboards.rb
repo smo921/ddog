@@ -3,7 +3,10 @@
 # Datadog Dashboards
 module Dashboards
   def self.help
-    'get dashboard <id>: Fetch dashboard by id'
+    <<~HELP
+      Dashboards
+        get dashboard <id>: Fetch dashboard by id
+    HELP
   end
 
   def dashboard_api

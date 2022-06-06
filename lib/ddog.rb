@@ -6,6 +6,9 @@ require_relative 'resources'
 class DDog
   include Dashboards
   include Keys
+  include Logs
+  include Monitors
+  include Users
 
   def initialize(options)
     @options = options
@@ -20,7 +23,8 @@ class DDog
   end
 
   def self.help
-    [Dashboards.help, Keys.help].join("\n")
+    # TODO: Fetch list of modules loaded by this class instead of enumerating them
+    [Dashboards.help, Keys.help, Logs.help, Monitors.help, Users.help].map(&:chomp).join("\n")
   end
 
   private
@@ -44,30 +48,5 @@ class DDog
     rescue KeyError
       abort 'DD_API_KEY_EU and DD_APP_KEY_EU must be set.'
     end
-  end
-
-  def monitor_api
-    @monitor_api ||= DatadogAPIClient::V1::MonitorsAPI.new
-  end
-
-  def log_indexes
-    logapi = DatadogAPIClient::V1::LogsIndexesAPI.new
-    logapi.list_log_indexes.indexes.map { |i| i.name.to_s }
-  end
-
-  def monitors
-    monitor_api.list_monitors
-  end
-
-  def get_monitor(id)
-    monitor_api.get_monitor(id)
-  rescue DatadogAPIClient::V1::APIError => e
-    warn "Problem with monitor: #{id}"
-    warn e if @options[:verbose]
-    {}
-  end
-
-  def get_user(name)
-    DatadogAPIClient::V1::UsersAPI.new.get_user(name.first)
   end
 end
