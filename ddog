@@ -28,8 +28,18 @@ end.parse!
 ddog = DDog.new(options)
 
 if ARGV.length == 1 && ARGV.first == 'help'
-  puts "Available commands:\n#{DDog.help}"
+  puts <<~HELP
+    Available commands:
+
+    #{DDog.help}
+
+  HELP
 elsif ARGV.length > 1
+  if ARGV.first == 'help'
+    module_name = Kernel.const_get(ARGV[1].capitalize)
+    puts module_name.send(:help)
+    exit
+  end
   command = "#{ARGV[0]}_#{ARGV[1]}"
   ARGV.shift(2)
   if options[:argument_file]
