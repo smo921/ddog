@@ -1,102 +1,12 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'optparse'
 require 'shellwords'
 require 'datadog_api_client'
 require 'json'
 
-class DDog
-  def initialize(options)
-    @options = options
-    @options[:eu] ? eu_conf : default_conf
-  end
-
-  def execute!(command, args)
-    warn "calling #{command} with (#{args})" if @options[:verbose]
-    args.empty? ? send(command.to_sym) : args.map { |a| send(command.to_sym, a).to_hash }
-  rescue NoMethodError => e
-    warn "Unknown command #{command}: #{e}"
-  end
-
-  private
-
-  def default_conf
-    DatadogAPIClient::V1.configure do |config|
-      config.api_key = ENV.fetch 'DD_API_KEY_US'
-      config.application_key = ENV.fetch 'DD_APP_KEY_US'
-      config.server_variables[:site] = 'datadoghq.com'
-      # config.debugging = true
-    rescue KeyError
-      abort 'DD_API_KEY_US and DD_APP_KEY_US must be set.'
-    end
-  end
-
-  def eu_conf
-    DatadogAPIClient::V1.configure do |config|
-      config.api_key = ENV.fetch 'DD_API_KEY_EU'
-      config.application_key = ENV.fetch 'DD_APP_KEY_EU'
-      config.server_variables[:site] = 'datadoghq.eu'
-    rescue KeyError
-      abort 'DD_API_KEY_EU and DD_APP_KEY_EU must be set.'
-    end
-  end
-
-  def dashboard_api
-    @dashboard_api ||= DatadogAPIClient::V1::DashboardsAPI.new
-  end
-
-  def monitor_api
-    @monitor_api ||= DatadogAPIClient::V1::MonitorsAPI.new
-  end
-
-  def all_api_keys
-    DatadogAPIClient::V1::KeyManagementAPI.new.list_api_keys.api_keys
-  end
-
-  def api_key(args)
-    type = args[0].to_sym
-    target = args[1]
-    if type == :value
-      all_api_keys.select { |k| k.key =~ /#{target}$/ }
-    else
-      all_api_keys.select { |k| k.send(args[0].to_sym).eql? target }
-    end.each { |k| puts "#{k.name}: #{k.key}" }
-  end
-
-  def api_keys
-    keys = all_api_keys
-    keys.map { |k| k.name.to_s }
-  end
-
-  def log_indexes
-    logapi = DatadogAPIClient::V1::LogsIndexesAPI.new
-    logapi.list_log_indexes.indexes.map { |i| i.name.to_s }
-  end
-
-  def monitors
-    monitor_api.list_monitors
-  end
-
-  def get_dashboard(id)
-    dashboard_api.get_dashboard(id)
-  rescue DatadogAPIClient::V1::APIError, ArgumentError => e
-    warn "Problem with dashboard: #{id}"
-    warn e if @options[:verbose]
-    {}
-  end
-
-  def get_monitor(id)
-    monitor_api.get_monitor(id)
-  rescue DatadogAPIClient::V1::APIError => e
-    warn "Problem with monitor: #{id}"
-    warn e if @options[:verbose]
-    {}
-  end
-
-  def get_user(name)
-    DatadogAPIClient::V1::UsersAPI.new.get_user(name.first)
-  end
-end
+require_relative 'lib/ddog'
 
 def shut_down
   puts "\nShutting down gracefully..."
@@ -117,7 +27,9 @@ end.parse!
 
 ddog = DDog.new(options)
 
-if ARGV.length > 1
+if ARGV.length == 1 && ARGV.first == 'help'
+  puts "Available commands:\n#{DDog.help}"
+elsif ARGV.length > 1
   command = "#{ARGV[0]}_#{ARGV[1]}"
   ARGV.shift(2)
   if options[:argument_file]
